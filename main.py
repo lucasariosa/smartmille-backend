@@ -18,19 +18,33 @@ app.add_middleware(
 # Cliente OpenAI
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# Modelo de dados recebido do frontend
 class Pedido(BaseModel):
     area: str
     cidade: str
     publico: str
     tipo: str
     estilo: str
+    nome: str | None = None
+    escritorio: str | None = None
+
 
 @app.get("/")
 def home():
-    return {"status": "SmartMille personalizado rodando"}
+    return {"status": "SmartMille backend ativo"}
+
 
 @app.post("/gerar-conteudo")
 def gerar_conteudo(pedido: Pedido):
+
+    # Montar assinatura institucional (se existir)
+    assinatura = ""
+    if pedido.nome and pedido.escritorio:
+        assinatura = f"{pedido.nome} – {pedido.escritorio}"
+    elif pedido.nome:
+        assinatura = pedido.nome
+    elif pedido.escritorio:
+        assinatura = pedido.escritorio
 
     prompt = f"""
 Você é um advogado atuante em {pedido.area}, com atuação na região de {pedido.cidade}.
@@ -47,25 +61,30 @@ Diretrizes obrigatórias:
 - conteúdo educativo e informativo
 - não prometer resultados
 - não mencionar valores ou honorários
-- respeitar o Código de Ética da OAB
+- respeitar rigorosamente o Código de Ética da OAB
 
-Estrutura do conteúdo:
-TÍTULO (impactante e informativo)
+Estrutura obrigatória do conteúdo:
+TÍTULO
 BLOCOS DE TEXTO (3 a 5 frases curtas)
-FECHAMENTO (autoridade e orientação geral)
+FECHAMENTO
 
-Não use emojis.
-Não escreva como legenda.
-Escreva como texto pronto para ser colocado diretamente em uma peça visual.
+Regras adicionais:
+- Não usar emojis
+- Não escrever como legenda
+- Não escrever como roteiro
+- O texto deve estar pronto para ser aplicado diretamente em uma peça visual
+
+Se houver assinatura institucional, inclua no FECHAMENTO de forma discreta:
+{assinatura}
 """
 
     resposta = client.responses.create(
         model="gpt-4.1-mini",
-        input=prompt,
+        input=prompt
     )
 
-    texto = resposta.output_text.strip()
+    texto_final = resposta.output_text.strip()
 
     return {
-        "resultado": texto
+        "resultado": texto_final
     }
