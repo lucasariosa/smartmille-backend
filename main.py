@@ -6,14 +6,20 @@ from openai import OpenAI
 
 app = FastAPI()
 
+# CORS CORRETO (evita "Failed to fetch")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[
+        "https://smartmille.com",
+        "https://www.smartmille.com",
+        "https://smartmille-frontend.onrender.com"
+    ],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Cliente OpenAI
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 class Pedido(BaseModel):
@@ -25,9 +31,15 @@ class Pedido(BaseModel):
     escritorio: str | None = None
 
 
+@app.get("/")
+def home():
+    return {"status": "SmartMille backend ativo"}
+
+
 @app.post("/gerar-carrossel")
 def gerar_carrossel(pedido: Pedido):
 
+    # Assinatura institucional
     assinatura = ""
     if pedido.nome and pedido.escritorio:
         assinatura = f"{pedido.nome} – {pedido.escritorio}"
@@ -36,6 +48,7 @@ def gerar_carrossel(pedido: Pedido):
     elif pedido.escritorio:
         assinatura = pedido.escritorio
 
+    # PROMPT DE TEXTO (3 slides)
     prompt_texto = f"""
 Você é um advogado especialista em {pedido.area}, atuando em {pedido.cidade},
 criando conteúdo para redes sociais voltado ao público {pedido.publico}.
@@ -77,6 +90,7 @@ Responda exatamente com 3 linhas, uma por slide.
 
     imagens = []
 
+    # GERAÇÃO DAS IMAGENS (3 slides)
     for texto in slides_texto:
         prompt_imagem = f"""
 Imagem vertical 4:5 para Instagram.
@@ -97,4 +111,6 @@ Sem pessoas específicas, sem marcas, sem logotipos.
 
         imagens.append(imagem.data[0].url)
 
-    return {"slides": imagens}
+    return {
+        "slides": imagens
+    }
