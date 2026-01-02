@@ -44,6 +44,7 @@ async def gerar_carrossel(req: CarouselRequest):
         """
 
         text_response = client.responses.create(
-            model="gpt-4.1-mini",
-            input=prompt,
-            response_format={"type_
+    model="gpt-4.1-mini",
+    input=prompt,
+    response_format={"type": "json"}
+)
