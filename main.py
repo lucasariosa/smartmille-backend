@@ -5,6 +5,7 @@ from openai import OpenAI
 import os
 import json
 import time
+import re
 
 app = FastAPI()
 
@@ -28,11 +29,9 @@ class CarouselRequest(BaseModel):
 
 
 def extrair_texto(resp):
-    # Caminho 1 (mais comum)
     if hasattr(resp, "output_text") and resp.output_text:
         return resp.output_text.strip()
 
-    # Caminho 2 (estrutura detalhada)
     if hasattr(resp, "output"):
         for item in resp.output:
             if isinstance(item, dict) and "content" in item:
@@ -41,6 +40,21 @@ def extrair_texto(resp):
                         return c.get("text", "").strip()
 
     return ""
+
+
+def limpar_json(texto: str) -> str:
+    """
+    Remove ```json ... ``` ou ``` ... ``` se existirem
+    """
+    texto = texto.strip()
+
+    # remove ```json
+    texto = re.sub(r"^```json\s*", "", texto, flags=re.IGNORECASE)
+    # remove ```
+    texto = re.sub(r"^```\s*", "", texto)
+    texto = re.sub(r"\s*```$", "", texto)
+
+    return texto.strip()
 
 
 @app.post("/gerar-carrossel")
@@ -58,7 +72,6 @@ Regras obrigatórias:
 - SEM mencionar "Dr.", "especialista", "ele", "ela"
 - Sempre usar "eu", "meu", "posso te ajudar"
 - Linguagem profissional, confiante e direta
-- Frases completas e bem pontuadas
 
 Estrutura:
 - Slide 1: dor ou pergunta forte
@@ -94,8 +107,8 @@ Retorne SOMENTE JSON válido no formato:
         resp = client.responses.create(
             model="gpt-4.1-mini",
             input=prompt_base if tentativa == 0 else (
-                f"O JSON anterior estava inválido. "
-                f"Retorne APENAS o JSON correto conforme instruções.\n\n{prompt_base}"
+                "O JSON anterior estava inválido. Retorne APENAS o JSON correto.\n\n"
+                + prompt_base
             )
         )
 
@@ -103,17 +116,19 @@ Retorne SOMENTE JSON válido no formato:
         ultimo_texto = texto
 
         if not texto:
-            print("⚠️ Resposta vazia da IA")
+            print("⚠️ Resposta vazia")
             continue
 
+        texto_limpo = limpar_json(texto)
+
         try:
-            data = json.loads(texto)
+            data = json.loads(texto_limpo)
             break
         except Exception:
-            print("⚠️ JSON inválido retornado")
+            print("⚠️ JSON inválido após limpeza")
 
     if not data:
-        print("❌ TEXTO FINAL RECEBIDO:", ultimo_texto)
+        print("❌ TEXTO FINAL RECEBIDO:\n", ultimo_texto)
         raise Exception("Falha ao gerar texto")
 
     slides = []
@@ -140,5 +155,4 @@ SEM texto.
         })
 
     print(f"🏁 Finalizado em {round(time.time() - start, 2)}s")
-
     return {"slides": slides}
