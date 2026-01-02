@@ -37,28 +37,31 @@ def gerar_carrossel(pedido: Pedido):
         assinatura = pedido.escritorio
 
     prompt_texto = f"""
-Você é um advogado atuante em {pedido.area}, com atuação na região de {pedido.cidade}.
-Seu público-alvo é {pedido.publico}.
+Você é um advogado especialista em {pedido.area}, atuando em {pedido.cidade},
+criando conteúdo para redes sociais voltado ao público {pedido.publico}.
 
-Crie um conteúdo jurídico para CARROSSEL com EXATAMENTE 3 slides, obedecendo:
+Crie exatamente 3 textos curtos para um CARROSSEL JURÍDICO PRONTO PARA PUBLICAR:
 
-SLIDE 1 – PERGUNTA
-SLIDE 2 – CONTEÚDO EXPLICATIVO
-SLIDE 3 – DEFINIÇÃO OU ORIENTAÇÃO FINAL
+Slide 1: Pergunta direta e chamativa
+Slide 2: Explicação prática e clara
+Slide 3: Orientação final ou definição objetiva
 
-Diretrizes obrigatórias:
-- frases curtas
-- linguagem clara e acessível
+Regras obrigatórias:
+- textos curtos e diretos
+- linguagem profissional e acessível
 - tom {pedido.estilo}
+- foco em autoridade e clareza
 - conteúdo educativo
 - não prometer resultados
-- não mencionar valores
+- não mencionar valores ou honorários
 - respeitar o Código de Ética da OAB
+- NÃO escrever legenda
+- NÃO usar emojis
 
-Se houver assinatura institucional, inclua de forma discreta no SLIDE 3:
+Se houver assinatura institucional, inclua discretamente no Slide 3:
 {assinatura}
 
-Responda EXATAMENTE com 3 linhas, uma por slide.
+Responda exatamente com 3 linhas, uma por slide.
 """
 
     resposta_texto = client.responses.create(
@@ -77,13 +80,13 @@ Responda EXATAMENTE com 3 linhas, uma por slide.
     for texto in slides_texto:
         prompt_imagem = f"""
 Imagem vertical 4:5 para Instagram.
-Fundo profissional e elegante relacionado à advocacia.
-Estilo moderno, minimalista e corporativo.
-Texto centralizado na imagem:
+Fundo elegante e corporativo relacionado à advocacia.
+Estilo moderno, limpo e profissional.
+Texto grande, centralizado e legível:
 
 "{texto}"
 
-Sem logotipos, sem pessoas identificáveis, sem marcas.
+Sem pessoas específicas, sem marcas, sem logotipos.
 """
 
         imagem = client.images.generate(
@@ -94,6 +97,4 @@ Sem logotipos, sem pessoas identificáveis, sem marcas.
 
         imagens.append(imagem.data[0].url)
 
-    return {
-        "slides": imagens
-    }
+    return {"slides": imagens}
