@@ -31,11 +31,11 @@ async def gerar_carrossel(req: CarouselRequest):
 
         prompt = f"""
         Gere um carrossel com 2 slides para um profissional liberal
-        (advogado, médico, contador), tom profissional.
+        (advogado, médico, contador), com linguagem profissional e objetiva.
 
         Tema: "{req.tema}"
 
-        Retorne SOMENTE JSON válido:
+        Retorne SOMENTE JSON válido, sem explicações, sem markdown:
         {{
           "slides": [
             {{ "texto": "Texto do slide 1" }},
@@ -46,11 +46,12 @@ async def gerar_carrossel(req: CarouselRequest):
 
         text_response = client.responses.create(
             model="gpt-4.1-mini",
-            input=prompt,
-            response_format={"type": "json"}
+            input=prompt
         )
 
-        data = json.loads(text_response.output_text)
+        raw_text = text_response.output_text.strip()
+        data = json.loads(raw_text)
+
         print("✅ Textos gerados com sucesso")
 
         slides_finais = []
@@ -62,9 +63,9 @@ async def gerar_carrossel(req: CarouselRequest):
             img_response = client.images.generate(
                 model="gpt-image-1",
                 prompt=f"""
-                Imagem institucional, clean, profissional,
-                formato 4:5, para Instagram,
-                relacionada ao texto:
+                Imagem institucional, limpa, profissional,
+                estilo corporativo, formato 4:5,
+                para Instagram, relacionada ao texto:
                 "{slide['texto']}"
                 """,
                 size="1024x1280"
@@ -78,6 +79,7 @@ async def gerar_carrossel(req: CarouselRequest):
             })
 
         print(f"🏁 Processo finalizado em {round(time.time() - start_time, 2)}s")
+
         return {"slides": slides_finais}
 
     except Exception as e:
