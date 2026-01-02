@@ -26,6 +26,24 @@ class CarouselRequest(BaseModel):
     publico: str
     tipo: str  # introducao | definicao | conclusao
 
+
+def extrair_texto(response):
+    """
+    Extrai texto de forma segura da API Responses
+    """
+    if hasattr(response, "output_text") and response.output_text:
+        return response.output_text.strip()
+
+    if hasattr(response, "output") and response.output:
+        for item in response.output:
+            if "content" in item:
+                for c in item["content"]:
+                    if c.get("type") == "output_text":
+                        return c.get("text", "").strip()
+
+    return ""
+
+
 @app.post("/gerar-carrossel")
 async def gerar_carrossel(req: CarouselRequest):
     start_time = time.time()
@@ -35,50 +53,57 @@ async def gerar_carrossel(req: CarouselRequest):
         print("🧠 Gerando textos...")
 
         prompt = f"""
-        Você é um especialista em copywriting jurídico.
+        Você é um especialista em copywriting jurídico focado em captação.
 
-        Gere um carrossel com 2 slides para Instagram com foco em CAPTAÇÃO DE CLIENTES.
+        Gere um carrossel com 2 slides para Instagram.
 
         Perfil:
-        - Profissão: {req.area}
+        - Área: {req.area}
         - Público-alvo: {req.publico}
         - Tipo de conteúdo: {req.tipo}
 
-        Regras obrigatórias:
-        - Linguagem profissional e acessível
+        Regras:
+        - Linguagem profissional
         - Frases completas
-        - Inicial maiúscula
-        - Pontuação correta
-        - Tom institucional (nada de influencer)
-        - Slide 1 deve gerar curiosidade ou dor
-        - Slide 2 deve gerar autoridade e intenção de contato
-        - O CTA deve conter:
+        - Ortografia e pontuação corretas
+        - Slide 1: dor ou pergunta
+        - Slide 2: autoridade + CTA
+        - CTA obrigatório:
           "Contato: {req.nome} – WhatsApp: {req.contato}"
 
-        Tema central:
+        Tema:
         "{req.tema}"
 
         Retorne SOMENTE JSON válido:
         {{
           "slides": [
-            {{
-              "headline": "Pergunta ou dor principal",
-              "texto": "Texto curto e objetivo"
-            }},
-            {{
-              "headline": "Autoridade e solução",
-              "texto": "Texto explicativo + CTA completo"
-            }}
+            {{ "headline": "Pergunta ou dor", "texto": "Texto do slide 1" }},
+            {{ "headline": "Autoridade e solução", "texto": "Texto do slide 2 com CTA" }}
           ]
         }}
         """
 
-        text_response = client.responses.create(
-            model="gpt-4.1-mini",
-            input=prompt
-        )
+        # Tentamos até 2 vezes obter JSON válido
+        data = None
 
-        data = json.loads(text_response.output_text.strip())
+        for tentativa in range(2):
+            response = client.responses.create(
+                model="gpt-4.1-mini",
+                input=prompt
+            )
+
+            texto = extrair_texto(response)
+
+            if texto:
+                try:
+                    data = json.loads(texto)
+                    break
+                except Exception as e:
+                    print(f"⚠️ JSON inválido (tentativa {tentativa+1})")
+
+        if not data:
+            raise Exception("Não foi possível gerar JSON válido")
+
         print("✅ Textos gerados")
 
         slides_finais = []
@@ -89,13 +114,11 @@ async def gerar_carrossel(req: CarouselRequest):
             img_response = client.images.generate(
                 model="gpt-image-1",
                 prompt="""
-                Imagem institucional e profissional.
-                Ambiente corporativo, escritório vazio moderno,
-                prédios empresariais ou avenida financeira.
-                Estilo Wall Street / Faria Lima.
-                Fotografia realista.
+                Imagem institucional profissional.
+                Escritório corporativo vazio ou prédio empresarial.
+                Estilo financeiro, elegante, moderno.
                 SEM pessoas.
-                SEM texto na imagem.
+                SEM texto.
                 """,
                 size="1024x1536"
             )
@@ -110,7 +133,7 @@ async def gerar_carrossel(req: CarouselRequest):
         return {"slides": slides_finais}
 
     except Exception as e:
-        print("❌ ERRO:", str(e))
+        print("❌ ERRO NO BACKEND:", str(e))
         return {
             "erro": "Falha ao gerar carrossel",
             "detalhe": str(e)
