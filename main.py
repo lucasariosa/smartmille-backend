@@ -6,7 +6,7 @@ from openai import OpenAI
 
 app = FastAPI()
 
-# CORS para permitir chamadas do frontend
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,25 +15,48 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Cliente da OpenAI (usa a variável de ambiente)
+# Cliente OpenAI
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 class Pedido(BaseModel):
     area: str
+    cidade: str
+    publico: str
     tipo: str
+    estilo: str
 
 @app.get("/")
 def home():
-    return {"status": "SmartMille com IA rodando"}
+    return {"status": "SmartMille personalizado rodando"}
 
 @app.post("/gerar-conteudo")
 def gerar_conteudo(pedido: Pedido):
 
     prompt = f"""
-Você é um advogado especialista em {pedido.area}.
-Crie um conteúdo para {pedido.tipo}, com linguagem simples,
-educativa e ética, voltada para o público leigo no Brasil.
-Não faça promessas, não cite valores e respeite o código de ética da OAB.
+Você é um advogado atuante em {pedido.area}, com atuação na região de {pedido.cidade}.
+Seu público-alvo principal é {pedido.publico}.
+
+Crie um conteúdo jurídico no formato de {pedido.tipo}, pensado para ser usado
+como PEÇA VISUAL (imagem ou vídeo curto com texto em motion).
+
+Diretrizes obrigatórias:
+- linguagem clara e acessível ao público leigo
+- frases curtas e objetivas
+- texto organizado em blocos
+- tom {pedido.estilo}
+- conteúdo educativo e informativo
+- não prometer resultados
+- não mencionar valores ou honorários
+- respeitar o Código de Ética da OAB
+
+Estrutura do conteúdo:
+TÍTULO (impactante e informativo)
+BLOCOS DE TEXTO (3 a 5 frases curtas)
+FECHAMENTO (autoridade e orientação geral)
+
+Não use emojis.
+Não escreva como legenda.
+Escreva como texto pronto para ser colocado diretamente em uma peça visual.
 """
 
     resposta = client.responses.create(
@@ -41,7 +64,7 @@ Não faça promessas, não cite valores e respeite o código de ética da OAB.
         input=prompt,
     )
 
-    texto = resposta.output_text
+    texto = resposta.output_text.strip()
 
     return {
         "resultado": texto
