@@ -68,7 +68,7 @@ async def gerar_carrossel(req: CarouselRequest):
                 para Instagram, relacionada ao texto:
                 "{slide['texto']}"
                 """,
-                size="1024x1280"
+                size="1024x1536"
             )
 
             print(f"✅ Imagem {i} gerada em {round(time.time() - img_start, 2)}s")
