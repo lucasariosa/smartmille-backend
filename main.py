@@ -6,7 +6,6 @@ from openai import OpenAI
 
 app = FastAPI()
 
-# CORS LIBERADO (TESTE DEFINITIVO)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,11 +13,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Preflight OPTIONS (resolve Failed to fetch)
-@app.options("/{path:path}")
-def options_handler(path: str):
-    return {}
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -29,6 +23,12 @@ class Pedido(BaseModel):
     estilo: str
     nome: str | None = None
     escritorio: str | None = None
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 
 @app.post("/gerar-carrossel")
 def gerar_carrossel(pedido: Pedido):
@@ -41,56 +41,36 @@ def gerar_carrossel(pedido: Pedido):
     elif pedido.escritorio:
         assinatura = pedido.escritorio
 
-    prompt_texto = f"""
-Você é um advogado especialista em {pedido.area}, atuando em {pedido.cidade},
-criando conteúdo para redes sociais voltado ao público {pedido.publico}.
+    # 🔹 SOMENTE TEXTO (sem imagem ainda)
+    prompt = f"""
+Crie exatamente 3 textos curtos para um carrossel jurídico.
+Área: {pedido.area}
+Cidade: {pedido.cidade}
+Público: {pedido.publico}
+Tom: {pedido.estilo}
 
-Crie exatamente 3 textos curtos para um CARROSSEL JURÍDICO PRONTO PARA PUBLICAR:
+Formato:
+1) Pergunta
+2) Explicação
+3) Orientação final
 
-Slide 1: Pergunta direta e chamativa
-Slide 2: Explicação prática e clara
-Slide 3: Orientação final ou definição objetiva
-
-Regras:
-- textos curtos e diretos
-- linguagem profissional e acessível
-- tom {pedido.estilo}
-- não prometer resultados
-- não mencionar valores
-- respeitar o Código de Ética da OAB
-- NÃO usar emojis
-
-Assinatura (se houver) no Slide 3:
-{assinatura}
-
-Responda com 3 linhas, uma por slide.
+Sem emojis.
+Sem promessas.
+Responda em 3 linhas.
+Assinatura no slide 3 (se houver): {assinatura}
 """
 
     resposta = client.responses.create(
         model="gpt-4.1-mini",
-        input=prompt_texto
+        input=prompt
     )
 
-    slides_texto = [
-        l.strip() for l in resposta.output_text.split("\n") if l.strip()
+    slides = [
+        l.strip()
+        for l in resposta.output_text.split("\n")
+        if l.strip()
     ][:3]
 
-    imagens = []
-
-    for texto in slides_texto:
-        img = client.images.generate(
-            model="gpt-image-1",
-            prompt=f"""
-Imagem vertical 4:5 para Instagram.
-Fundo corporativo jurídico elegante.
-Texto centralizado e legível:
-
-"{texto}"
-
-Sem pessoas, marcas ou logotipos.
-""",
-            size="1024x1280"
-        )
-        imagens.append(img.data[0].url)
-
-    return {"slides": imagens}
+    return {
+        "slides_texto": slides
+    }
