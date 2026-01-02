@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from openai import OpenAI
 import os
 import json
+import time
 
 app = FastAPI()
 
@@ -22,10 +23,16 @@ class CarouselRequest(BaseModel):
 
 @app.post("/gerar-carrossel")
 async def gerar_carrossel(req: CarouselRequest):
+    start_time = time.time()
+    print("➡️ Requisição recebida:", req.tema)
+
     try:
+        print("🧠 Gerando textos...")
         prompt = f"""
-        Gere um carrossel com 2 slides para Instagram sobre:
-        "{req.tema}"
+        Gere um carrossel com 2 slides para um profissional liberal
+        (advogado, médico, contador), tom profissional.
+
+        Tema: "{req.tema}"
 
         Retorne SOMENTE JSON válido:
         {{
@@ -36,29 +43,7 @@ async def gerar_carrossel(req: CarouselRequest):
         }}
         """
 
-        response = client.responses.create(
+        text_response = client.responses.create(
             model="gpt-4.1-mini",
             input=prompt,
-            response_format={"type": "json"}
-        )
-
-        data = json.loads(response.output_text)
-
-        slides_finais = []
-
-        for slide in data["slides"]:
-            img = client.images.generate(
-                model="gpt-image-1",
-                prompt=f"Imagem profissional, clean, formato 4:5, para Instagram sobre: {slide['texto']}",
-                size="1024x1280"
-            )
-
-            slides_finais.append({
-                "texto": slide["texto"],
-                "imagem": img.data[0].b64_json
-            })
-
-        return {"slides": slides_finais}
-
-    except Exception as e:
-        return {"erro": f"Backend error: {str(e)}"}
+            response_format={"type_
