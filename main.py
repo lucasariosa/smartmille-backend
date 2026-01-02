@@ -7,6 +7,7 @@ from openai import OpenAI
 
 app = FastAPI()
 
+# CORS simples e seguro para produção
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,7 +18,8 @@ app.add_middleware(
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-class Pedido(BaseModel):
+# ---------- MODELOS ----------
+class PedidoTexto(BaseModel):
     area: str
     cidade: str
     publico: str
@@ -25,16 +27,17 @@ class Pedido(BaseModel):
     nome: str | None = None
     escritorio: str | None = None
 
+class PedidoImagens(BaseModel):
+    textos: List[str]
 
+# ---------- HEALTH ----------
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
-
-@app.post("/gerar-carrossel")
-def gerar_carrossel(pedido: Pedido):
-
-    # Assinatura institucional
+# ---------- ETAPA 1: TEXTO (RÁPIDO) ----------
+@app.post("/gerar-textos")
+def gerar_textos(pedido: PedidoTexto):
     assinatura = ""
     if pedido.nome and pedido.escritorio:
         assinatura = f"{pedido.nome} – {pedido.escritorio}"
@@ -43,9 +46,8 @@ def gerar_carrossel(pedido: Pedido):
     elif pedido.escritorio:
         assinatura = pedido.escritorio
 
-    # 1️⃣ GERAR TEXTOS
-    prompt_texto = f"""
-Crie exatamente 3 textos curtos para um carrossel jurídico pronto para Instagram.
+    prompt = f"""
+Crie exatamente 2 textos curtos para um carrossel jurídico pronto para Instagram.
 
 Contexto:
 Área: {pedido.area}
@@ -54,9 +56,8 @@ Público: {pedido.publico}
 Tom: {pedido.estilo}
 
 Formato:
-Slide 1: Pergunta direta
-Slide 2: Explicação clara
-Slide 3: Orientação final
+Slide 1: Pergunta direta (dor)
+Slide 2: Orientação clara (resposta)
 
 Regras:
 - linguagem profissional e acessível
@@ -65,28 +66,28 @@ Regras:
 - sem valores
 - respeitar o Código de Ética da OAB
 
-Assinatura (se houver) no slide 3:
+Assinatura (se houver) no slide 2:
 {assinatura}
 
-Responda com exatamente 3 linhas.
+Responda com exatamente 2 linhas.
 """
 
-    resposta_texto = client.responses.create(
+    resp = client.responses.create(
         model="gpt-4.1-mini",
-        input=prompt_texto
+        input=prompt
     )
 
-    textos = [
-        l.strip()
-        for l in resposta_texto.output_text.split("\n")
-        if l.strip()
-    ][:3]
+    textos = [l.strip() for l in resp.output_text.split("\n") if l.strip()][:2]
 
-    # 2️⃣ GERAR IMAGENS (a partir dos textos)
+    return {"textos": textos}
+
+# ---------- ETAPA 2: IMAGENS (PESADO) ----------
+@app.post("/gerar-imagens")
+def gerar_imagens(pedido: PedidoImagens):
     imagens = []
 
-    for texto in textos:
-        prompt_imagem = f"""
+    for texto in pedido.textos:
+        prompt_img = f"""
 Imagem vertical 4:5 para Instagram.
 Fundo corporativo jurídico elegante.
 Estilo moderno, minimalista e profissional.
@@ -97,15 +98,12 @@ Texto grande, centralizado e legível:
 Sem pessoas, sem marcas, sem logotipos.
 """
 
-        imagem = client.images.generate(
+        img = client.images.generate(
             model="gpt-image-1",
-            prompt=prompt_imagem,
+            prompt=prompt_img,
             size="1024x1280"
         )
 
-        imagens.append(imagem.data[0].url)
+        imagens.append(img.data[0].url)
 
-    # 🎁 ENTREGA FINAL (produto)
-    return {
-        "imagens": imagens
-    }
+    return {"imagens": imagens}
