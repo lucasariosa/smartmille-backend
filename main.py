@@ -27,23 +27,16 @@ class CarouselRequest(BaseModel):
     tipo: str
 
 
-def extrair_texto_resposta(resp):
-    """
-    Extrai texto da API Responses de forma segura,
-    independentemente do formato retornado.
-    """
-    # Caso padrão
+def extrair_texto(resp):
     if hasattr(resp, "output_text") and resp.output_text:
         return resp.output_text.strip()
 
-    # Caso estruturado
-    if hasattr(resp, "output") and resp.output:
+    if hasattr(resp, "output"):
         for item in resp.output:
-            if isinstance(item, dict) and "content" in item:
-                for bloco in item["content"]:
-                    if bloco.get("type") == "output_text":
-                        return bloco.get("text", "").strip()
-
+            if "content" in item:
+                for c in item["content"]:
+                    if c.get("type") == "output_text":
+                        return c.get("text", "").strip()
     return ""
 
 
@@ -54,28 +47,34 @@ async def gerar_carrossel(req: CarouselRequest):
 
     try:
         prompt = f"""
-        Você é um copywriter jurídico especializado em captação de clientes.
+        Você é um profissional liberal falando em PRIMEIRA PESSOA.
 
-        Gere um carrossel com 2 slides para Instagram.
+        Gere um carrossel com 2 slides para Instagram focado em captação.
 
-        Perfil:
+        Regras obrigatórias:
+        - SEM terceira pessoa
+        - SEM mencionar "Dr.", "especialista", "ele", "ela"
+        - Sempre usar "eu", "meu", "posso te ajudar"
+        - Linguagem profissional, confiante e direta
+        - Frases completas e bem pontuadas
+
+        Estrutura:
+        - Slide 1: dor ou pergunta forte
+        - Slide 2: autoridade em primeira pessoa + CTA
+
+        CTA obrigatório no slide 2:
+        "Fale comigo:
+        {req.nome} | WhatsApp: {req.contato}"
+
+        Contexto:
         - Área: {req.area}
         - Público-alvo: {req.publico}
         - Tipo de conteúdo: {req.tipo}
 
-        Regras obrigatórias:
-        - Linguagem profissional
-        - Frases completas
-        - Ortografia correta
-        - Slide 1: pergunta ou dor
-        - Slide 2: autoridade + CTA
-        - CTA obrigatório:
-          "Contato: {req.nome} | WhatsApp: {req.contato}"
-
         Tema:
         "{req.tema}"
 
-        Retorne SOMENTE JSON válido:
+        Retorne SOMENTE JSON:
         {{
           "slides": [
             {{ "headline": "...", "texto": "..." }},
@@ -86,60 +85,46 @@ async def gerar_carrossel(req: CarouselRequest):
 
         data = None
 
-        # Retry controlado (2 tentativas)
-        for tentativa in range(2):
-            print(f"🧠 Gerando textos (tentativa {tentativa+1})...")
+        for _ in range(2):
             resp = client.responses.create(
                 model="gpt-4.1-mini",
                 input=prompt
             )
-
-            texto = extrair_texto_resposta(resp)
-
-            if not texto:
-                print("⚠️ Resposta vazia da IA")
-                continue
-
-            try:
-                data = json.loads(texto)
-                break
-            except Exception as e:
-                print("⚠️ JSON inválido:", texto)
+            texto = extrair_texto(resp)
+            if texto:
+                try:
+                    data = json.loads(texto)
+                    break
+                except:
+                    pass
 
         if not data:
-            raise Exception("Falha ao obter JSON válido da IA")
+            raise Exception("Falha ao gerar texto")
 
-        slides_finais = []
+        slides = []
 
-        for i, slide in enumerate(data["slides"], start=1):
-            print(f"🖼️ Gerando imagem {i}...")
-
+        for slide in data["slides"]:
             img = client.images.generate(
                 model="gpt-image-1",
                 prompt="""
                 Imagem institucional profissional.
-                Escritório corporativo vazio, prédio empresarial,
-                ambiente financeiro sofisticado.
-                Estilo moderno.
+                Escritório corporativo vazio ou prédio empresarial moderno.
+                Estilo elegante, sofisticado.
                 SEM pessoas.
                 SEM texto.
                 """,
                 size="1024x1024"
             )
 
-            slides_finais.append({
+            slides.append({
                 "headline": slide["headline"],
                 "texto": slide["texto"],
                 "imagem": img.data[0].b64_json
             })
 
         print(f"🏁 Finalizado em {round(time.time() - start, 2)}s")
-
-        return {"slides": slides_finais}
+        return {"slides": slides}
 
     except Exception as e:
-        print("❌ ERRO NO BACKEND:", str(e))
-        return {
-            "erro": "Falha ao gerar carrossel",
-            "detalhe": str(e)
-        }
+        print("❌ ERRO:", str(e))
+        return {"erro": "Falha ao gerar carrossel"}
