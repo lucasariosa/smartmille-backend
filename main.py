@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from typing import List
 import os
 from openai import OpenAI
 
@@ -33,6 +34,7 @@ def health():
 @app.post("/gerar-carrossel")
 def gerar_carrossel(pedido: Pedido):
 
+    # Assinatura institucional
     assinatura = ""
     if pedido.nome and pedido.escritorio:
         assinatura = f"{pedido.nome} – {pedido.escritorio}"
@@ -41,36 +43,69 @@ def gerar_carrossel(pedido: Pedido):
     elif pedido.escritorio:
         assinatura = pedido.escritorio
 
-    # 🔹 SOMENTE TEXTO (sem imagem ainda)
-    prompt = f"""
-Crie exatamente 3 textos curtos para um carrossel jurídico.
+    # 1️⃣ GERAR TEXTOS
+    prompt_texto = f"""
+Crie exatamente 3 textos curtos para um carrossel jurídico pronto para Instagram.
+
+Contexto:
 Área: {pedido.area}
 Cidade: {pedido.cidade}
 Público: {pedido.publico}
 Tom: {pedido.estilo}
 
 Formato:
-1) Pergunta
-2) Explicação
-3) Orientação final
+Slide 1: Pergunta direta
+Slide 2: Explicação clara
+Slide 3: Orientação final
 
-Sem emojis.
-Sem promessas.
-Responda em 3 linhas.
-Assinatura no slide 3 (se houver): {assinatura}
+Regras:
+- linguagem profissional e acessível
+- sem emojis
+- sem promessas
+- sem valores
+- respeitar o Código de Ética da OAB
+
+Assinatura (se houver) no slide 3:
+{assinatura}
+
+Responda com exatamente 3 linhas.
 """
 
-    resposta = client.responses.create(
+    resposta_texto = client.responses.create(
         model="gpt-4.1-mini",
-        input=prompt
+        input=prompt_texto
     )
 
-    slides = [
+    textos = [
         l.strip()
-        for l in resposta.output_text.split("\n")
+        for l in resposta_texto.output_text.split("\n")
         if l.strip()
     ][:3]
 
+    # 2️⃣ GERAR IMAGENS (a partir dos textos)
+    imagens = []
+
+    for texto in textos:
+        prompt_imagem = f"""
+Imagem vertical 4:5 para Instagram.
+Fundo corporativo jurídico elegante.
+Estilo moderno, minimalista e profissional.
+Texto grande, centralizado e legível:
+
+"{texto}"
+
+Sem pessoas, sem marcas, sem logotipos.
+"""
+
+        imagem = client.images.generate(
+            model="gpt-image-1",
+            prompt=prompt_imagem,
+            size="1024x1280"
+        )
+
+        imagens.append(imagem.data[0].url)
+
+    # 🎁 ENTREGA FINAL (produto)
     return {
-        "slides_texto": slides
+        "imagens": imagens
     }
