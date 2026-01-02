@@ -20,6 +20,11 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 class CarouselRequest(BaseModel):
     tema: str
+    nome: str
+    contato: str
+    area: str
+    publico: str
+    tipo: str  # introducao | definicao | conclusao
 
 @app.post("/gerar-carrossel")
 async def gerar_carrossel(req: CarouselRequest):
@@ -30,16 +35,40 @@ async def gerar_carrossel(req: CarouselRequest):
         print("🧠 Gerando textos...")
 
         prompt = f"""
-        Gere um carrossel com 2 slides para um profissional liberal
-        (advogado, médico, contador), com linguagem profissional e objetiva.
+        Você é um especialista em copywriting jurídico.
 
-        Tema: "{req.tema}"
+        Gere um carrossel com 2 slides para Instagram com foco em CAPTAÇÃO DE CLIENTES.
 
-        Retorne SOMENTE JSON válido, sem explicações, sem markdown:
+        Perfil:
+        - Profissão: {req.area}
+        - Público-alvo: {req.publico}
+        - Tipo de conteúdo: {req.tipo}
+
+        Regras obrigatórias:
+        - Linguagem profissional e acessível
+        - Frases completas
+        - Inicial maiúscula
+        - Pontuação correta
+        - Tom institucional (nada de influencer)
+        - Slide 1 deve gerar curiosidade ou dor
+        - Slide 2 deve gerar autoridade e intenção de contato
+        - O CTA deve conter:
+          "Contato: {req.nome} – WhatsApp: {req.contato}"
+
+        Tema central:
+        "{req.tema}"
+
+        Retorne SOMENTE JSON válido:
         {{
           "slides": [
-            {{ "texto": "Texto do slide 1" }},
-            {{ "texto": "Texto do slide 2" }}
+            {{
+              "headline": "Pergunta ou dor principal",
+              "texto": "Texto curto e objetivo"
+            }},
+            {{
+              "headline": "Autoridade e solução",
+              "texto": "Texto explicativo + CTA completo"
+            }}
           ]
         }}
         """
@@ -49,41 +78,39 @@ async def gerar_carrossel(req: CarouselRequest):
             input=prompt
         )
 
-        raw_text = text_response.output_text.strip()
-        data = json.loads(raw_text)
-
-        print("✅ Textos gerados com sucesso")
+        data = json.loads(text_response.output_text.strip())
+        print("✅ Textos gerados")
 
         slides_finais = []
 
         for i, slide in enumerate(data["slides"], start=1):
             print(f"🖼️ Gerando imagem {i}...")
-            img_start = time.time()
 
             img_response = client.images.generate(
                 model="gpt-image-1",
-                prompt=f"""
-                Imagem institucional, limpa, profissional,
-                estilo corporativo, formato 4:5,
-                para Instagram, relacionada ao texto:
-                "{slide['texto']}"
+                prompt="""
+                Imagem institucional e profissional.
+                Ambiente corporativo, escritório vazio moderno,
+                prédios empresariais ou avenida financeira.
+                Estilo Wall Street / Faria Lima.
+                Fotografia realista.
+                SEM pessoas.
+                SEM texto na imagem.
                 """,
                 size="1024x1536"
             )
 
-            print(f"✅ Imagem {i} gerada em {round(time.time() - img_start, 2)}s")
-
             slides_finais.append({
+                "headline": slide["headline"],
                 "texto": slide["texto"],
                 "imagem": img_response.data[0].b64_json
             })
 
-        print(f"🏁 Processo finalizado em {round(time.time() - start_time, 2)}s")
-
+        print(f"🏁 Finalizado em {round(time.time() - start_time, 2)}s")
         return {"slides": slides_finais}
 
     except Exception as e:
-        print("❌ ERRO NO BACKEND:", str(e))
+        print("❌ ERRO:", str(e))
         return {
             "erro": "Falha ao gerar carrossel",
             "detalhe": str(e)
