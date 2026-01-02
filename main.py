@@ -1,109 +1,77 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List
-import os
+from pydantic import BaseModel
 from openai import OpenAI
+import base64
+import os
 
 app = FastAPI()
 
-# CORS simples e seguro para produção
+# CORS liberado
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# ---------- MODELOS ----------
-class PedidoTexto(BaseModel):
-    area: str
-    cidade: str
-    publico: str
-    estilo: str
-    nome: str | None = None
-    escritorio: str | None = None
+class CarouselRequest(BaseModel):
+    tema: str
 
-class PedidoImagens(BaseModel):
-    textos: List[str]
+@app.post("/gerar-carrossel")
+def gerar_carrossel(req: CarouselRequest):
+    try:
+        # 1) Geração dos textos (2 slides)
+        texto_prompt = f"""
+        Gere um carrossel de Instagram com 2 slides sobre o tema:
+        "{req.tema}"
 
-# ---------- HEALTH ----------
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+        Retorne APENAS em JSON no formato:
+        {{
+          "slides": [
+            {{ "texto": "Texto curto e direto para o slide 1" }},
+            {{ "texto": "Texto curto e direto para o slide 2" }}
+          ]
+        }}
+        """
 
-# ---------- ETAPA 1: TEXTO (RÁPIDO) ----------
-@app.post("/gerar-textos")
-def gerar_textos(pedido: PedidoTexto):
-    assinatura = ""
-    if pedido.nome and pedido.escritorio:
-        assinatura = f"{pedido.nome} – {pedido.escritorio}"
-    elif pedido.nome:
-        assinatura = pedido.nome
-    elif pedido.escritorio:
-        assinatura = pedido.escritorio
-
-    prompt = f"""
-Crie exatamente 2 textos curtos para um carrossel jurídico pronto para Instagram.
-
-Contexto:
-Área: {pedido.area}
-Cidade: {pedido.cidade}
-Público: {pedido.publico}
-Tom: {pedido.estilo}
-
-Formato:
-Slide 1: Pergunta direta (dor)
-Slide 2: Orientação clara (resposta)
-
-Regras:
-- linguagem profissional e acessível
-- sem emojis
-- sem promessas
-- sem valores
-- respeitar o Código de Ética da OAB
-
-Assinatura (se houver) no slide 2:
-{assinatura}
-
-Responda com exatamente 2 linhas.
-"""
-
-    resp = client.responses.create(
-        model="gpt-4.1-mini",
-        input=prompt
-    )
-
-    textos = [l.strip() for l in resp.output_text.split("\n") if l.strip()][:2]
-
-    return {"textos": textos}
-
-# ---------- ETAPA 2: IMAGENS (PESADO) ----------
-@app.post("/gerar-imagens")
-def gerar_imagens(pedido: PedidoImagens):
-    imagens = []
-
-    for texto in pedido.textos:
-        prompt_img = f"""
-Imagem vertical 4:5 para Instagram.
-Fundo corporativo jurídico elegante.
-Estilo moderno, minimalista e profissional.
-Texto grande, centralizado e legível:
-
-"{texto}"
-
-Sem pessoas, sem marcas, sem logotipos.
-"""
-
-        img = client.images.generate(
-            model="gpt-image-1",
-            prompt=prompt_img,
-            size="1024x1280"
+        texto_resp = client.responses.create(
+            model="gpt-4.1-mini",
+            input=texto_prompt,
         )
 
-        imagens.append(img.data[0].url)
+        textos_json = eval(texto_resp.output_text)
+        slides = textos_json["slides"]
 
-    return {"imagens": imagens}
+        slides_finais = []
+
+        # 2) Geração das imagens (4:5)
+        for slide in slides:
+            img_prompt = f"""
+            Crie uma imagem clean, moderna e profissional para Instagram (formato 4:5),
+            relacionada ao texto:
+            "{slide['texto']}"
+
+            Estilo minimalista, fundo claro, tipografia elegante.
+            """
+
+            img_resp = client.images.generate(
+                model="gpt-image-1",
+                prompt=img_prompt,
+                size="1024x1280"  # 4:5
+            )
+
+            img_base64 = img_resp.data[0].b64_json
+
+            slides_finais.append({
+                "texto": slide["texto"],
+                "imagem": img_base64
+            })
+
+        return {"slides": slides_finais}
+
+    except Exception as e:
+        return {"erro": str(e)}
