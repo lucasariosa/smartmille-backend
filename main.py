@@ -6,20 +6,20 @@ from openai import OpenAI
 
 app = FastAPI()
 
-# CORS CORRETO (evita "Failed to fetch")
+# CORS LIBERADO (TESTE DEFINITIVO)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://smartmille.com",
-        "https://www.smartmille.com",
-        "https://smartmille-frontend.onrender.com"
-    ],
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Cliente OpenAI
+# Preflight OPTIONS (resolve Failed to fetch)
+@app.options("/{path:path}")
+def options_handler(path: str):
+    return {}
+
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 class Pedido(BaseModel):
@@ -30,16 +30,9 @@ class Pedido(BaseModel):
     nome: str | None = None
     escritorio: str | None = None
 
-
-@app.get("/")
-def home():
-    return {"status": "SmartMille backend ativo"}
-
-
 @app.post("/gerar-carrossel")
 def gerar_carrossel(pedido: Pedido):
 
-    # Assinatura institucional
     assinatura = ""
     if pedido.nome and pedido.escritorio:
         assinatura = f"{pedido.nome} – {pedido.escritorio}"
@@ -48,7 +41,6 @@ def gerar_carrossel(pedido: Pedido):
     elif pedido.escritorio:
         assinatura = pedido.escritorio
 
-    # PROMPT DE TEXTO (3 slides)
     prompt_texto = f"""
 Você é um advogado especialista em {pedido.area}, atuando em {pedido.cidade},
 criando conteúdo para redes sociais voltado ao público {pedido.publico}.
@@ -59,58 +51,46 @@ Slide 1: Pergunta direta e chamativa
 Slide 2: Explicação prática e clara
 Slide 3: Orientação final ou definição objetiva
 
-Regras obrigatórias:
+Regras:
 - textos curtos e diretos
 - linguagem profissional e acessível
 - tom {pedido.estilo}
-- foco em autoridade e clareza
-- conteúdo educativo
 - não prometer resultados
-- não mencionar valores ou honorários
+- não mencionar valores
 - respeitar o Código de Ética da OAB
-- NÃO escrever legenda
 - NÃO usar emojis
 
-Se houver assinatura institucional, inclua discretamente no Slide 3:
+Assinatura (se houver) no Slide 3:
 {assinatura}
 
-Responda exatamente com 3 linhas, uma por slide.
+Responda com 3 linhas, uma por slide.
 """
 
-    resposta_texto = client.responses.create(
+    resposta = client.responses.create(
         model="gpt-4.1-mini",
         input=prompt_texto
     )
 
     slides_texto = [
-        linha.strip()
-        for linha in resposta_texto.output_text.split("\n")
-        if linha.strip()
+        l.strip() for l in resposta.output_text.split("\n") if l.strip()
     ][:3]
 
     imagens = []
 
-    # GERAÇÃO DAS IMAGENS (3 slides)
     for texto in slides_texto:
-        prompt_imagem = f"""
+        img = client.images.generate(
+            model="gpt-image-1",
+            prompt=f"""
 Imagem vertical 4:5 para Instagram.
-Fundo elegante e corporativo relacionado à advocacia.
-Estilo moderno, limpo e profissional.
-Texto grande, centralizado e legível:
+Fundo corporativo jurídico elegante.
+Texto centralizado e legível:
 
 "{texto}"
 
-Sem pessoas específicas, sem marcas, sem logotipos.
-"""
-
-        imagem = client.images.generate(
-            model="gpt-image-1",
-            prompt=prompt_imagem,
+Sem pessoas, marcas ou logotipos.
+""",
             size="1024x1280"
         )
+        imagens.append(img.data[0].url)
 
-        imagens.append(imagem.data[0].url)
-
-    return {
-        "slides": imagens
-    }
+    return {"slides": imagens}
