@@ -63,7 +63,7 @@ Boa iluminação, alto contraste e composição moderna.
         img = client.images.generate(
             model="gpt-image-1",
             prompt=prompt,
-            size="1024x1280"
+            size="1024x1536"
         )
 
         image_base64 = img.data[0].b64_json
