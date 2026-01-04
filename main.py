@@ -1,14 +1,15 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from openai import OpenAI
+import base64
 import os
-import random
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = FastAPI()
 
+# CORS liberado
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,78 +19,65 @@ app.add_middleware(
 )
 
 class CarouselRequest(BaseModel):
+    nome: str
+    contato: str
+    area: str
+    publico: str
+    tipo: str
     tema: str
 
-HEADLINE_FONTS = ["Anton", "Playfair Display", "Novecento"]
-BODY_FONTS = ["Abel", "Montserrat", "Poppins", "Nunito"]
-
-def build_image_prompt(tema: str, headline: str, body_text: str) -> str:
-    headline_font = random.choice(HEADLINE_FONTS)
-    body_font = random.choice(BODY_FONTS)
-
-    return f"""
-Create a premium editorial-style social media image.
-
-Theme: {tema}
-
-MAIN HEADLINE:
-"{headline}"
-
-Design rules for headline:
-- Use the font {headline_font}
-- Headline must be LARGE, dominant, and centered or slightly offset
-- Highlight up to TWO important words in ALL CAPS
-- Apply subtle shadow or elegant glow around the letters
-- Choose a refined color that fits the theme (no neon, no childish tones)
-- Headline must NOT look like default system fonts
-
-SUPPORTING TEXT:
-"{body_text}"
-
-Design rules for supporting text:
-- Use font {body_font}
-- Place text fluidly (bottom-left, center, or bottom-right)
-- Text must sit inside a semi-transparent box (~10% opacity)
-- Box should feel minimal, modern, and sophisticated
-
-GENERAL STYLE:
-- Typography-driven design
-- Clean, modern, premium aesthetic
-- Professional advertising look
-- No clutter
-- No small unreadable text
-- No default or amateur layouts
-"""
 
 @app.post("/gerar-carrossel")
 def gerar_carrossel(data: CarouselRequest):
+
     tema = data.tema
 
-    # Textos (podem vir de LLM depois, aqui está estável)
-    headline_1 = f"O segredo do {tema} eficiente"
-    body_1 = f"Entenda como aplicar {tema} com mais clareza e resultado."
-
-    headline_2 = f"{tema}: o que realmente importa"
-    body_2 = f"Evite erros comuns e tome decisões mais inteligentes."
-
-    prompts = [
-        build_image_prompt(tema, headline_1, body_1),
-        build_image_prompt(tema, headline_2, body_2),
+    # ---- TEXTOS (simples e estáveis) ----
+    slides_text = [
+        {
+            "headline": f"O que você precisa saber sobre {tema}",
+            "texto": f"Entenda os principais pontos de {tema} e como isso pode impactar você."
+        },
+        {
+            "headline": f"{tema}: atenção a estes detalhes",
+            "texto": f"Evite erros comuns e tome decisões mais seguras sobre {tema}."
+        }
     ]
 
-    images = []
+    slides = []
 
-    for prompt in prompts:
-        result = client.images.generate(
+    for slide in slides_text:
+
+        prompt = f"""
+Crie uma imagem editorial premium para redes sociais.
+
+Tema: {tema}
+
+A imagem deve ser limpa, elegante e profissional.
+Sem textos visíveis na imagem.
+Estilo fotográfico ou ilustrativo sofisticado.
+Boa iluminação, alto contraste e composição moderna.
+"""
+
+        # ---- GERA IMAGEM ----
+        img = client.images.generate(
             model="gpt-image-1",
             prompt=prompt,
-            size="1024x1024"
+            size="1024x1280"
         )
-        images.append(result.data[0].url)
+
+        image_base64 = img.data[0].b64_json
+
+        slides.append({
+            "headline": slide["headline"],
+            "texto": slide["texto"],
+            "imagem": image_base64
+        })
 
     return {
-        "images": images
+        "slides": slides
     }
+
 
 @app.get("/health")
 def health():
