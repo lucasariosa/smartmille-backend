@@ -1,11 +1,11 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 import os
-import json
-import time
-import re
+import random
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = FastAPI()
 
@@ -17,142 +17,80 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
 class CarouselRequest(BaseModel):
     tema: str
-    nome: str
-    contato: str
-    area: str
-    publico: str
-    tipo: str
 
+HEADLINE_FONTS = ["Anton", "Playfair Display", "Novecento"]
+BODY_FONTS = ["Abel", "Montserrat", "Poppins", "Nunito"]
 
-def extrair_texto(resp):
-    if hasattr(resp, "output_text") and resp.output_text:
-        return resp.output_text.strip()
+def build_image_prompt(tema: str, headline: str, body_text: str) -> str:
+    headline_font = random.choice(HEADLINE_FONTS)
+    body_font = random.choice(BODY_FONTS)
 
-    if hasattr(resp, "output"):
-        for item in resp.output:
-            if isinstance(item, dict) and "content" in item:
-                for c in item["content"]:
-                    if c.get("type") == "output_text":
-                        return c.get("text", "").strip()
+    return f"""
+Create a premium editorial-style social media image.
 
-    return ""
+Theme: {tema}
 
+MAIN HEADLINE:
+"{headline}"
 
-def limpar_json(texto: str) -> str:
-    """
-    Remove ```json ... ``` ou ``` ... ``` se existirem
-    """
-    texto = texto.strip()
+Design rules for headline:
+- Use the font {headline_font}
+- Headline must be LARGE, dominant, and centered or slightly offset
+- Highlight up to TWO important words in ALL CAPS
+- Apply subtle shadow or elegant glow around the letters
+- Choose a refined color that fits the theme (no neon, no childish tones)
+- Headline must NOT look like default system fonts
 
-    # remove ```json
-    texto = re.sub(r"^```json\s*", "", texto, flags=re.IGNORECASE)
-    # remove ```
-    texto = re.sub(r"^```\s*", "", texto)
-    texto = re.sub(r"\s*```$", "", texto)
+SUPPORTING TEXT:
+"{body_text}"
 
-    return texto.strip()
+Design rules for supporting text:
+- Use font {body_font}
+- Place text fluidly (bottom-left, center, or bottom-right)
+- Text must sit inside a semi-transparent box (~10% opacity)
+- Box should feel minimal, modern, and sophisticated
 
-
-@app.post("/gerar-carrossel")
-async def gerar_carrossel(req: CarouselRequest):
-    print("➡️ Requisição recebida:", req.tema)
-    start = time.time()
-
-    prompt_base = f"""
-Você é um profissional liberal falando em PRIMEIRA PESSOA.
-
-Gere um carrossel com 2 slides para Instagram focado em captação.
-
-Regras obrigatórias:
-- SEM terceira pessoa
-- SEM mencionar "Dr.", "especialista", "ele", "ela"
-- Sempre usar "eu", "meu", "posso te ajudar"
-- Linguagem profissional, confiante e direta
-
-Estrutura:
-- Slide 1: dor ou pergunta forte
-- Slide 2: autoridade em primeira pessoa + CTA
-
-CTA obrigatório no slide 2:
-"Fale comigo:
-{req.nome} | WhatsApp: {req.contato}"
-
-Contexto:
-- Área: {req.area}
-- Público-alvo: {req.publico}
-- Tipo de conteúdo: {req.tipo}
-
-Tema:
-"{req.tema}"
-
-Retorne SOMENTE JSON válido no formato:
-{{
-  "slides": [
-    {{ "headline": "...", "texto": "..." }},
-    {{ "headline": "...", "texto": "..." }}
-  ]
-}}
+GENERAL STYLE:
+- Typography-driven design
+- Clean, modern, premium aesthetic
+- Professional advertising look
+- No clutter
+- No small unreadable text
+- No default or amateur layouts
 """
 
-    data = None
-    ultimo_texto = ""
+@app.post("/gerar-carrossel")
+def gerar_carrossel(data: CarouselRequest):
+    tema = data.tema
 
-    for tentativa in range(3):
-        print(f"🧠 Gerando textos (tentativa {tentativa + 1})")
+    # Textos (podem vir de LLM depois, aqui está estável)
+    headline_1 = f"O segredo do {tema} eficiente"
+    body_1 = f"Entenda como aplicar {tema} com mais clareza e resultado."
 
-        resp = client.responses.create(
-            model="gpt-4.1-mini",
-            input=prompt_base if tentativa == 0 else (
-                "O JSON anterior estava inválido. Retorne APENAS o JSON correto.\n\n"
-                + prompt_base
-            )
-        )
+    headline_2 = f"{tema}: o que realmente importa"
+    body_2 = f"Evite erros comuns e tome decisões mais inteligentes."
 
-        texto = extrair_texto(resp)
-        ultimo_texto = texto
+    prompts = [
+        build_image_prompt(tema, headline_1, body_1),
+        build_image_prompt(tema, headline_2, body_2),
+    ]
 
-        if not texto:
-            print("⚠️ Resposta vazia")
-            continue
+    images = []
 
-        texto_limpo = limpar_json(texto)
-
-        try:
-            data = json.loads(texto_limpo)
-            break
-        except Exception:
-            print("⚠️ JSON inválido após limpeza")
-
-    if not data:
-        print("❌ TEXTO FINAL RECEBIDO:\n", ultimo_texto)
-        raise Exception("Falha ao gerar texto")
-
-    slides = []
-
-    for i, slide in enumerate(data["slides"], start=1):
-        print(f"🖼️ Gerando imagem {i}")
-
-        img = client.images.generate(
+    for prompt in prompts:
+        result = client.images.generate(
             model="gpt-image-1",
-            prompt="""
-Imagem institucional profissional.
-Escritório corporativo vazio ou prédio empresarial moderno.
-Estilo elegante, sofisticado.
-SEM pessoas.
-SEM texto.
-""",
+            prompt=prompt,
             size="1024x1024"
         )
+        images.append(result.data[0].url)
 
-        slides.append({
-            "headline": slide["headline"],
-            "texto": slide["texto"],
-            "imagem": img.data[0].b64_json
-        })
+    return {
+        "images": images
+    }
 
-    print(f"🏁 Finalizado em {round(time.time() - start, 2)}s")
-    return {"slides": slides}
+@app.get("/health")
+def health():
+    return {"status": "ok"}
